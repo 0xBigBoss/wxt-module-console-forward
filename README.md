@@ -6,6 +6,8 @@ A WXT module that forwards console logs from web extension scripts (background, 
 
 - ✅ **Development Mode Only** - Only works in development mode for security
 - ✅ **All Contexts Supported** - Background, content scripts, popup, and injected inpage scripts
+- ✅ **Dynamic Port Detection** - Automatically detects and uses the actual WXT dev server port
+- ✅ **Command Line Support** - Works with custom ports specified via `--port` parameter
 - ✅ **Error Forwarding** - Captures unhandled errors and promise rejections
 - ✅ **Context Identification** - Clearly identifies which script context logs come from
 - ✅ **Object & Array Logging** - Properly serializes complex objects

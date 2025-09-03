@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Console Forward Test</title>
+  <style>
+// Console forwarding injected by WXT module
+(function() {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const originalWarn = console.warn;
+  const originalInfo = console.info;
+  const originalDebug = console.debug;
+  
+  // Detect context
+  let context = 'unknown';
+  if (typeof ServiceWorkerGlobalScope !== 'undefined' && self instanceof ServiceWorkerGlobalScope) {
+    context = 'background:service-worker';
+  } else if (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope) {
+    context = 'worker';
+  } else if (typeof window !== 'undefined') {
+    if (window.location?.protocol === 'chrome-extension:') {
+      context = 'popup:main-world';
+    } else if (document?.readyState !== undefined) {
+      context = 'content:main-world';
+    } else {
+      context = 'inpage:main-world';
+    }
+  }
+  
+  function forwardLog(level, args) {
+    const timestamp = new Date().toISOString();
+    const logData = {
+      level,
+      message: args.map(arg => 
+        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+      ).join(' '),
+      context,
+      timestamp
+    };
+    
+    // Send to dev server
+    fetch('http://localhost:3001/api/debug/client-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(logData)
+    }).catch(() => {}); // Silent fail if dev server down
+  }
+  
+  console.log = function(...args) {
+    forwardLog('log', args);
+    return originalLog.apply(console, args);
+  };
+  
+  console.error = function(...args) {
+    forwardLog('error', args);
+    return originalError.apply(console, args);
+  };
+  
+  console.warn = function(...args) {
+    forwardLog('warn', args);
+    return originalWarn.apply(console, args);
+  };
+  
+  console.info = function(...args) {
+    forwardLog('info', args);
+    return originalInfo.apply(console, args);
+  };
+  
+  console.debug = function(...args) {
+    forwardLog('debug', args);
+    return originalDebug.apply(console, args);
+  };
+})();
+
+
+    body {
+      width: 350px;
+      min-height: 400px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      margin: 0;
+    }
+    
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    h1 {
+      margin: 0 0 5px 0;
+      font-size: 1.5em;
+    }
+    
+    .subtitle {
+      opacity: 0.8;
+      font-size: 0.9em;
+    }
+    
+    .section {
+      margin: 15px 0;
+      padding: 15px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+    }
+    
+    .section h2 {
+      margin: 0 0 10px 0;
+      font-size: 1.1em;
+      color: #fff;
+    }
+    
+    button {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      border: none;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: all 0.2s ease;
+    }
+    
+    button:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+    
+    button:active {
+      transform: translateY(0);
+    }
+    
+    .status {
+      font-size: 0.8em;
+      opacity: 0.9;
+      margin-top: 5px;
+    }
+    
+    .counter {
+      text-align: center;
+      font-size: 0.9em;
+      opacity: 0.8;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 0.8em;
+      opacity: 0.7;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+    
+    .pulsing {
+      animation: pulse 1s infinite;
+    }
+  </style>
+  <script type="module" crossorigin src="/chunks/popup-BcucAd5M.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>Console Forward Test</h1>
+    <div class="subtitle">Web Extension Console Logging Demo</div>
+  </div>
+
+  <div class="section">
+    <h2>Basic Logging</h2>
+    <button id="test-basic">Test Basic Console Methods</button>
+    <button id="test-objects">Test Object Logging</button>
+    <button id="test-errors">Test Error Logging</button>
+  </div>
+
+  <div class="section">
+    <h2>Advanced Features</h2>
+    <button id="test-promises">Test Promise Rejections</button>
+    <button id="test-performance">Test Performance Timing</button>
+    <button id="test-communication">Test Background Communication</button>
+  </div>
+
+  <div class="section">
+    <h2>Interactive Tests</h2>
+    <button id="start-periodic">Start Periodic Logging</button>
+    <button id="stop-periodic" disabled>Stop Periodic Logging</button>
+    <div class="counter">
+      Click counter: <span id="click-counter">0</span>
+    </div>
+  </div>
+
+  <div class="status" id="status">
+    Ready to test console forwarding
+  </div>
+
+  <div class="footer">
+    Check your terminal to see forwarded logs
+  </div>
+
+</body>
+</html>

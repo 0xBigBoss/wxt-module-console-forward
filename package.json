@@ -1,11 +1,51 @@
 {
   "name": "wxt-module-console-forward",
-  "module": "src/index.ts",
+  "version": "1.0.0",
+  "description": "WXT module for forwarding console logs from web extension scripts to dev server",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
+    }
+  },
   "type": "module",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "keywords": [
+    "wxt",
+    "web-extension",
+    "console",
+    "logging",
+    "development",
+    "debugging"
+  ],
+  "author": "WXT Module Console Forward",
+  "license": "MIT",
+  "scripts": {
+    "dev": "cd example-extension && bun run dev",
+    "build": "unbuild",
+    "prepare": "bun run build",
+    "typecheck": "tsc --noEmit",
+    "test:example": "cd example-extension-2 && bun run dev"
+  },
+  "dependencies": {
+    "micromatch": "^4.0.8"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "^1.2.21",
+    "@types/micromatch": "^4.0.9",
+    "typescript": "^5.9.2",
+    "unbuild": "^2.0.0"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "wxt": ">=0.19.0",
+    "vite": "^5.0.0 || ^6.0.0 || ^7.0.0"
   }
 }

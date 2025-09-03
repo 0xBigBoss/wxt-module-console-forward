@@ -1,0 +1,19 @@
+{
+  "name": "wxt-console-forward-example",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip"
+  },
+  "devDependencies": {
+    "wxt": "^0.20.8",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@types/micromatch": "^4.0.9",
+    "micromatch": "^4.0.8",
+    "wxt-module-console-forward": "file:../"
+  }
+}

@@ -28,6 +28,14 @@
   ],
   "author": "WXT Module Console Forward",
   "license": "MIT",
+  "homepage": "https://github.com/0xBigBoss/wxt-module-console-forward#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xBigBoss/wxt-module-console-forward.git"
+  },
+  "bugs": {
+    "url": "https://github.com/0xBigBoss/wxt-module-console-forward/issues"
+  },
   "scripts": {
     "dev": "cd example-extension && bun run dev",
     "build": "unbuild",

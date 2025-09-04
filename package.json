@@ -33,14 +33,17 @@
     "build": "unbuild",
     "prepare": "bun run build",
     "typecheck": "tsc --noEmit",
-    "test:example": "cd example-extension-2 && bun run dev"
+    "test:example": "cd example-extension && bun run dev",
+    "test": "playwright test"
   },
   "dependencies": {
     "micromatch": "^4.0.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/bun": "^1.2.21",
     "@types/micromatch": "^4.0.9",
+    "playwright": "^1.55.0",
     "typescript": "^5.9.2",
     "unbuild": "^2.0.0"
   },

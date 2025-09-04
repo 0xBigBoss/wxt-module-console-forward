@@ -137,7 +137,7 @@ export default defineWxtModule<ConsoleForwardOptions>({
             listenPort?: number | string,
             ...args: any[]
           ) {
-            const result = originalListen.call(this, listenPort, ...args);
+            const result = originalListen.call(this, listenPort as number, ...args);
 
             // Update URL if the actual listen port differs
             if (listenPort && listenPort !== port) {

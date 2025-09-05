@@ -6,8 +6,8 @@ A WXT module that forwards console logs from web extension scripts (background, 
 
 - ✅ **Development Mode Only** - Only works in development mode for security
 - ✅ **All Contexts Supported** - Background, content scripts, popup, and injected inpage scripts
-- ✅ **Dynamic Port Detection** - Automatically detects and uses the actual WXT dev server port
-- ✅ **Command Line Support** - Works with custom ports specified via `--port` parameter
+- ✅ **Port Configuration Support** - Respects custom port settings from `wxt.config.ts` dev server configuration
+- ✅ **Dynamic Port Detection** - Automatically detects and uses the configured WXT dev server port
 - ✅ **Error Forwarding** - Captures unhandled errors and promise rejections
 - ✅ **Context Identification** - Clearly identifies which script context logs come from
 - ✅ **Object & Array Logging** - Properly serializes complex objects
@@ -32,7 +32,14 @@ import consoleForward from 'wxt-module-console-forward';
 export default defineConfig({
   modules: [consoleForward],
   
-  // Optional configuration
+  // Optional: Custom dev server port (module will automatically use this)
+  dev: {
+    server: {
+      port: 5175, // Module will respect this port configuration
+    },
+  },
+  
+  // Optional console forwarding configuration
   consoleForward: {
     enabled: true, // Only works in dev mode anyway
     endpoint: '/api/debug/client-logs',

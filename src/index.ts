@@ -201,7 +201,7 @@ export default defineWxtModule<ConsoleForwardOptions>({
 
         resolveId(id) {
           // Handle both direct imports and Vite's /@id/ prefixed imports
-          const cleanId = id.replace(/^\/@id\/\\0?/, "");
+          const cleanId = id.replace(/^\/@id\/\0?/, "");
 
           if (cleanId === configModuleId || id === configModuleId) {
             return `\0${configModuleId}`;
@@ -511,9 +511,9 @@ export default { flushLogs };
           ) {
             const moduleContext = entrypointName || "popup";
             const scriptTag = `<script type="module">
-import { setModuleContext } from '/@id/\\0${forwardModuleId}';
+import { setModuleContext } from '${forwardModuleId}';
 setModuleContext('${moduleContext}');
-import '/@id/\\0${forwardModuleId}';
+import '${forwardModuleId}';
 </script>`;
 
             if (html.includes("<head>")) {

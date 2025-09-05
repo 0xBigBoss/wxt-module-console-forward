@@ -1,7 +1,8 @@
+import assert from "assert";
+import type { IncomingMessage } from "http";
+import type { Plugin } from "vite";
 import "wxt";
 import { defineWxtModule } from "wxt/modules";
-import type { Plugin, ViteDevServer, ResolvedConfig } from "vite";
-import type { IncomingMessage } from "http";
 
 interface LogEntry {
   level: string;
@@ -69,94 +70,22 @@ export default defineWxtModule<ConsoleForwardOptions>({
 
     wxt.logger.info("[console-forward] Module enabled for development mode");
 
+    // Get the dev server URL from WXT configuration
+    assert(wxt.config.dev.server, "Dev server configuration not found");
+    const devServerUrl = `http://${wxt.config.dev.server.host}:${wxt.config.dev.server.port}`;
+
+    wxt.logger.info(`[console-forward] Using dev server URL: ${devServerUrl}`);
+
     // Virtual modules
     const configModuleId = "virtual:console-forward-config";
     const forwardModuleId = "virtual:console-forward";
 
-    // Shared variable to store the actual dev server URL across plugin instances
-    let sharedDevServerUrl = "";
-
     // Create the console forwarding Vite plugin
     const consoleForwardPlugin = (): Plugin => {
-      let viteConfig: ResolvedConfig;
-
       return {
         name: "wxt-console-forward",
-        configResolved(config) {
-          viteConfig = config;
-        },
 
         configureServer(server) {
-          // Immediately capture server configuration
-          const serverConfig = (viteConfig?.server ||
-            server.config?.server ||
-            {}) as {
-            host?: string | boolean;
-            port?: number;
-            https?: boolean;
-          };
-          const host =
-            serverConfig.host === true
-              ? "localhost"
-              : typeof serverConfig.host === "string"
-              ? serverConfig.host
-              : "localhost";
-          const protocol = serverConfig.https ? "https" : "http";
-
-          // Try to get port from various sources
-          let port: number = serverConfig.port || 3000;
-          if (!serverConfig.port) {
-            // Check if port was passed via command line or process.argv
-            const portArg = process.argv.find((arg) =>
-              arg.startsWith("--port=")
-            );
-            if (portArg) {
-              const parsedPort = parseInt(portArg.split("=")[1]!, 10);
-              if (!isNaN(parsedPort)) {
-                port = parsedPort;
-              }
-            } else {
-              const portIndex = process.argv.indexOf("--port");
-              if (portIndex !== -1 && process.argv[portIndex + 1]) {
-                const parsedPort = parseInt(process.argv[portIndex + 1]!, 10);
-                if (!isNaN(parsedPort)) {
-                  port = parsedPort;
-                }
-              }
-            }
-          }
-
-          sharedDevServerUrl = `${protocol}://${host}:${port}`;
-          wxt.logger.info(
-            `[console-forward] Initial dev server URL: ${sharedDevServerUrl}`
-          );
-
-          // Hook into server startup to confirm/update the URL if needed
-          const originalListen = server.listen.bind(server);
-          server.listen = function (
-            listenPort?: number | string,
-            ...args: any[]
-          ) {
-            const result = originalListen.call(this, listenPort as number, ...args);
-
-            // Update URL if the actual listen port differs
-            if (listenPort && listenPort !== port) {
-              const actualPort =
-                typeof listenPort === "string"
-                  ? parseInt(listenPort, 10)
-                  : listenPort;
-              if (!isNaN(actualPort) && actualPort !== port) {
-                port = actualPort;
-                sharedDevServerUrl = `${protocol}://${host}:${actualPort}`;
-                wxt.logger.info(
-                  `[console-forward] Updated dev server URL: ${sharedDevServerUrl}`
-                );
-              }
-            }
-
-            return result;
-          };
-
           // Add middleware for handling console forwarding requests
           server.middlewares.use((req, res, next) => {
             const request = req as IncomingMessage & {
@@ -285,11 +214,8 @@ export default defineWxtModule<ConsoleForwardOptions>({
 
         load(id) {
           if (id === `\0${configModuleId}`) {
-            // Use sharedDevServerUrl or provide a fallback
-            const devServerEndpoint =
-              sharedDevServerUrl || "http://localhost:3000";
             return `
-export const DEV_SERVER_ENDPOINT = '${devServerEndpoint}';
+export const DEV_SERVER_ENDPOINT = '${devServerUrl}';
 export const ENDPOINT_PATH = '${resolvedOptions.endpoint}';
 export const SILENT_ON_ERROR = ${resolvedOptions.silentOnError};
 export const LEVELS = ${JSON.stringify(resolvedOptions.levels)};
@@ -555,7 +481,7 @@ export default { flushLogs };
               id.endsWith(".tsx") ||
               id.endsWith(".jsx")) &&
             !code.includes(forwardModuleId) &&
-            !code.includes('setModuleContext')
+            !code.includes("setModuleContext")
           ) {
             const moduleContext = entrypointName || "unknown";
             return (
@@ -579,7 +505,10 @@ export default { flushLogs };
           }
 
           // Check if the module is already included in the HTML or if setModuleContext is present
-          if (!html.includes(forwardModuleId) && !html.includes('setModuleContext')) {
+          if (
+            !html.includes(forwardModuleId) &&
+            !html.includes("setModuleContext")
+          ) {
             const moduleContext = entrypointName || "popup";
             const scriptTag = `<script type="module">
 import { setModuleContext } from '/@id/\\0${forwardModuleId}';

@@ -1,6 +1,14 @@
+import debugBase from "debug";
+
+// Enable debug module for this namespace
+debugBase.enable("extension:*");
+
+const debug = debugBase("extension:content");
+
 export default defineContentScript({
   matches: ["*://*/*"], // Match all websites for easier testing
   main() {
+    debug("Content script started on: %s", window.location.href);
     console.log("[Content] Content script started on:", window.location.href);
     console.info("[Content] Document ready state:", document.readyState);
     console.warn("[Content] This is a warning from content script");
@@ -20,6 +28,7 @@ export default defineContentScript({
     };
 
     console.log("[Content] Page info:", pageInfo);
+    debug("Page info with debug module: %O", pageInfo);
 
     // Test DOM interaction
     setTimeout(() => {
@@ -35,10 +44,14 @@ export default defineContentScript({
         console.log(
           `[Content] Periodic content log #${contentCounter} - Scroll Y: ${window.scrollY}`
         );
+        debug(
+          `Periodic content debug log #${contentCounter} - Scroll Y: ${window.scrollY}`
+        );
 
         if (contentCounter >= 3) {
           clearInterval(contentInterval);
           console.log("[Content] Content periodic logging completed");
+          debug("Content periodic logging completed (from debug module)");
         }
       }, 3000);
     }, 1000);
@@ -48,15 +61,18 @@ export default defineContentScript({
     document.addEventListener("click", (event) => {
       clickCount++;
       if (clickCount <= 5) {
-        console.log(`[Content] Click #${clickCount} on:`, {
+        const clickInfo = {
           tag: event.target?.tagName,
           id: event.target?.id,
           className: event.target?.className,
           position: { x: event.clientX, y: event.clientY },
-        });
+        };
+        console.log(`[Content] Click #${clickCount} on:`, clickInfo);
+        debug(`Click #${clickCount} on: %O`, clickInfo);
       }
     });
 
     console.log("[Content] Content script initialization complete");
+    debug("Content script initialization complete (from debug module)");
   },
 });

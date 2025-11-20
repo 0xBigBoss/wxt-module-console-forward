@@ -1,5 +1,6 @@
 export default defineBackground(() => {
   console.log('[Background] Background script started');
+  // Note: debug module cannot be used in MV3 service workers due to localStorage dependency
   console.info('[Background] Extension ID:', browser.runtime.id);
   
   // Test different console methods
@@ -16,13 +17,13 @@ export default defineBackground(() => {
   };
   
   console.log('[Background] Background data:', backgroundData);
-  
+
   // Test periodic logging
   let counter = 0;
   const interval = setInterval(() => {
     counter++;
     console.log(`[Background] Periodic log #${counter} at ${new Date().toISOString()}`);
-    
+
     if (counter >= 5) {
       clearInterval(interval);
       console.log('[Background] Periodic logging completed');

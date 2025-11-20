@@ -15,10 +15,12 @@
     "postinstall": "wxt prepare"
   },
   "devDependencies": {
+    "@types/debug": "^4.1.12",
     "typescript": "^5.9.2",
     "wxt": "^0.20.6"
   },
   "dependencies": {
-    "wxt-module-console-forward": "file:../"
+    "debug": "^4.4.0",
+    "wxt-module-console-forward": "file:.."
   }
 }

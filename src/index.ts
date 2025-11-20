@@ -1,4 +1,3 @@
-import assert from "assert";
 import type { IncomingMessage } from "http";
 import type { Plugin } from "vite";
 import "wxt";
@@ -51,6 +50,15 @@ export default defineWxtModule<ConsoleForwardOptions>({
   name: "console-forward",
   configKey: "consoleForward",
   async setup(wxt, options = {}) {
+    const isServeCommand = wxt.config.command === "serve";
+
+    if (!isServeCommand) {
+      wxt.logger.info(
+        "[console-forward] Module disabled (only active during wxt dev command)"
+      );
+      return;
+    }
+
     const resolvedOptions: Required<ConsoleForwardOptions> = {
       enabled: wxt.config.mode === "development",
       endpoint: "/api/debug/client-logs",
@@ -71,8 +79,13 @@ export default defineWxtModule<ConsoleForwardOptions>({
     wxt.logger.info("[console-forward] Module enabled for development mode");
 
     // Get the dev server URL from WXT configuration
-    assert(wxt.config.dev.server, "Dev server configuration not found");
-    const devServerUrl = `http://${wxt.config.dev.server.host}:${wxt.config.dev.server.port}`;
+    if (!wxt.config.dev.server) {
+      throw new Error(
+        "Dev server configuration not found. Ensure the module runs with `wxt dev` so `dev.server` is available."
+      );
+    }
+    const { host, port } = wxt.config.dev.server;
+    const devServerUrl = `http://${host}:${port}`;
 
     wxt.logger.info(`[console-forward] Using dev server URL: ${devServerUrl}`);
 

@@ -27,18 +27,17 @@ Add the module to your `wxt.config.ts`:
 
 ```typescript
 import { defineConfig } from 'wxt';
-import consoleForward from 'wxt-module-console-forward';
 
 export default defineConfig({
-  modules: [consoleForward],
-  
+  modules: ['wxt-module-console-forward'],
+
   // Optional: Custom dev server port (module will automatically use this)
   dev: {
     server: {
       port: 5175, // Module will respect this port configuration
     },
   },
-  
+
   // Optional console forwarding configuration
   consoleForward: {
     enabled: true, // Only works in dev mode anyway
@@ -51,7 +50,7 @@ export default defineConfig({
 });
 ```
 
-That's it! Now when you run `wxt dev`, all console logs from your extension scripts will appear in your terminal.
+That's it! Now when you run `wxt`, all console logs from your extension scripts will appear in your terminal.
 
 ## Configuration Options
 
@@ -101,8 +100,8 @@ Check out the `example-extension/` directory for a complete demo that showcases:
 
 ```bash
 cd example-extension
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Then load the extension in Chrome and:
@@ -124,19 +123,29 @@ The module automatically detects and labels different execution contexts:
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Run the example extension
-npm run dev
+bun run dev
 
-# Build the example extension
-npm run build
+# Build the module
+bun run build
+```
+
+## Testing
+
+```bash
+# Run tests (headless)
+bun run test
+
+# Run tests with visible browser
+HEADED=1 bun run test
 ```
 
 ## Requirements
 
-- WXT ^0.19.0
-- Vite ^5.0.0
+- WXT >=0.19.0
+- Vite ^5.0.0, ^6.0.0, or ^7.0.0
 - Development mode only (automatically disabled in production)
 
 ## License

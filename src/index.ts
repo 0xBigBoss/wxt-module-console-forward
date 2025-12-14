@@ -223,12 +223,6 @@ export default defineWxtModule<ConsoleForwardOptions>({
           if (cleanId === forwardModuleId || id === forwardModuleId) {
             return `\0${forwardModuleId}`;
           }
-          // Handle init modules for HTML entrypoints (external script to avoid CSP inline violations)
-          const initPrefix = `${forwardModuleId}-init/`;
-          if (cleanId.startsWith(initPrefix) || id.startsWith(initPrefix)) {
-            const context = (cleanId.startsWith(initPrefix) ? cleanId : id).slice(initPrefix.length);
-            return `\0${initPrefix}${context}`;
-          }
           return null;
         },
 
@@ -476,17 +470,6 @@ if (!isInitialized) {
 export default { flushLogs };
             `;
           }
-
-          // Handle init modules for HTML entrypoints (external script to avoid CSP inline violations)
-          const initPrefix = `\0${forwardModuleId}-init/`;
-          if (id.startsWith(initPrefix)) {
-            const context = id.slice(initPrefix.length);
-            return `
-import { setModuleContext } from '${forwardModuleId}';
-setModuleContext('${context}');
-import '${forwardModuleId}';
-            `;
-          }
         },
 
         transform(code, id) {
@@ -530,42 +513,10 @@ import '${forwardModuleId}';
           }
         },
 
-        // Track HTML entrypoints that need console forward init scripts
-        transformIndexHtml: {
-          order: "pre",
-          handler(html, ctx) {
-            const entrypointName = ctx.filename
-              .split("/")
-              .pop()
-              ?.replace(/\.[^.]+$/, "");
-            if (
-              entrypointName &&
-              resolvedOptions.excludeEntrypoints.includes(entrypointName)
-            ) {
-              return;
-            }
-
-            // Check if the module is already included in the HTML or if setModuleContext is present
-            if (
-              !html.includes(forwardModuleId) &&
-              !html.includes("setModuleContext") &&
-              !html.includes("console-forward-init")
-            ) {
-              const moduleContext = entrypointName || "popup";
-              // Use external script file to avoid CSP inline script violations in Chrome MV3 extension pages
-              const initModuleId = `${forwardModuleId}-init/${moduleContext}`;
-              const scriptTag = `<script type="module" src="/${initModuleId}"></script>`;
-
-              if (html.includes("<head>")) {
-                return html.replace("<head>", `<head>\n${scriptTag}`);
-              } else if (html.includes("<body>")) {
-                return html.replace("<body>", `<body>\n${scriptTag}`);
-              } else {
-                return scriptTag + "\n" + html;
-              }
-            }
-          },
-        },
+        // NOTE: HTML injection removed - the transform hook handles JS/TS entry files,
+        // which covers popup/main.ts and other entrypoints. The JS transform approach
+        // avoids CSP inline script violations in Chrome MV3 extension pages since
+        // the imports are bundled into the JS output rather than inline in HTML.
       };
     };
 

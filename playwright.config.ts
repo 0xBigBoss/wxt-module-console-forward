@@ -1,5 +1,4 @@
-import { defineConfig, devices } from "@playwright/test";
-import path from "path";
+import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
@@ -7,26 +6,20 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
-  reporter: "list",
+  reporter: process.env.CI ? [["html"], ["list"]] : "list",
   timeout: 60000,
   use: {
     trace: "on-first-retry",
+    screenshot: "only-on-failure",
   },
-  projects: [
-    {
-      name: "chromium",
-      use: {
-        ...devices["Desktop Chrome"],
-        // Use chromium channel for extension testing
-        channel: "chromium",
-      },
-    },
-  ],
+  // Extension tests use custom fixtures that handle browser launch
+  // No projects needed - fixtures.ts handles chromium.launchPersistentContext
   webServer: {
     command: "cd example-extension && bun run dev",
-    port: 3000,
+    port: 5175,
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",
     stderr: "pipe",
+    timeout: 30000,
   },
 });

@@ -93,6 +93,7 @@ export default defineWxtModule<ConsoleForwardOptions>({
     // Virtual modules
     const configModuleId = "virtual:console-forward-config";
     const forwardModuleId = "virtual:console-forward";
+    const lastForwardedLogs: LogEntry[] = [];
 
     // Create the console forwarding Vite plugin
     const consoleForwardPlugin = (): Plugin => {
@@ -126,6 +127,25 @@ export default defineWxtModule<ConsoleForwardOptions>({
             res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
             res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+            // Support test helpers
+            if (request.method === "GET") {
+              res.writeHead(200, {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+              });
+              res.end(JSON.stringify({ logs: lastForwardedLogs }));
+              return;
+            }
+
+            if (request.method === "DELETE") {
+              lastForwardedLogs.length = 0;
+              res.writeHead(204, {
+                "Access-Control-Allow-Origin": "*",
+              });
+              res.end();
+              return;
+            }
+
             // Handle OPTIONS preflight
             if (request.method === "OPTIONS") {
               res.writeHead(200);
@@ -145,6 +165,7 @@ export default defineWxtModule<ConsoleForwardOptions>({
                 const { logs }: ClientLogRequest = JSON.parse(body);
 
                 logs.forEach((log) => {
+                  lastForwardedLogs.push(log);
                   const location = log.url ? ` (${log.url})` : "";
                   let message = `[${log.module || "unknown"}] [${log.level}] ${
                     log.message

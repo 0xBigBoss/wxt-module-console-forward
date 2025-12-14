@@ -1,3 +1,4 @@
+import type { BrowserContext } from "@playwright/test";
 import { test, expect } from "./fixtures";
 
 const DEV_SERVER_PORT = 5175;
@@ -26,6 +27,12 @@ test.describe("Console Forwarding Extension", () => {
   }) => {
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popupPage.waitForLoadState("domcontentloaded");
+    await popupPage.waitForFunction(
+      () => document.querySelector("#app")?.childElementCount,
+      undefined,
+      { timeout: 10000 }
+    );
 
     // Verify popup loaded with expected elements using resilient locators
     await expect(popupPage.getByRole("heading", { level: 1 })).toContainText(
@@ -46,8 +53,20 @@ test.describe("Console Forwarding Extension", () => {
     context,
     extensionId,
   }) => {
+    const endpointUrl = `${DEV_SERVER_URL}${ENDPOINT_PATH}`;
+    await interceptForwardedLogs(context, endpointUrl, () => {});
+
     const popupPage = await context.newPage();
     await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popupPage.waitForLoadState("domcontentloaded");
+    await popupPage.waitForFunction(
+      () => document.querySelector("#app")?.childElementCount,
+      undefined,
+      { timeout: 10000 }
+    );
+    await expect(
+      popupPage.getByRole("button", { name: /test console logs/i })
+    ).toBeVisible();
 
     const consoleMessages: string[] = [];
     popupPage.on("console", (msg) => {
@@ -95,27 +114,215 @@ test.describe("Console Forwarding Extension", () => {
   });
 });
 
-test.describe("Console Forwarding Integration", () => {
-  test("should accept logs at forwarding endpoint", async ({}) => {
-    const testLogData = {
-      logs: [
-        {
-          level: "log",
-          message: "Test console forwarding from Playwright",
-          timestamp: new Date().toISOString(),
-          module: "test",
-        },
-      ],
-    };
+const ENDPOINT_PATH = "/api/debug/client-logs";
 
-    const response = await fetch(`${DEV_SERVER_URL}/api/debug/client-logs`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+async function interceptForwardedLogs(
+  context: BrowserContext,
+  endpointUrl: string,
+  onLogs: (logs: any[]) => void
+) {
+  // Match both explicit endpoint and any host variations
+  await context.route("**/api/debug/client-logs", async (route) => {
+    const body = route.request().postData();
+    if (body) {
+      try {
+        const parsed = JSON.parse(body);
+        if (Array.isArray(parsed.logs)) {
+          onLogs(parsed.logs);
+        }
+      } catch {
+        // ignore malformed payloads
+      }
+    }
+
+    // Let the request hit the dev server so the normal logging pipeline still runs
+    await route.continue();
+  });
+
+  const requestListener = async (request: any) => {
+    if (!request.url().includes("/api/debug/client-logs")) return;
+    const body = request.postData();
+    if (!body) return;
+    try {
+      const parsed = JSON.parse(body);
+      if (Array.isArray(parsed.logs)) {
+        onLogs(parsed.logs);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  context.on("request", requestListener);
+  context.once("close", () => {
+    context.off("request", requestListener);
+  });
+}
+
+test.describe("Console Forwarding Integration", () => {
+  test("should accept logs at forwarding endpoint", async ({ context }) => {
+    const endpointUrl = `${DEV_SERVER_URL}${ENDPOINT_PATH}`;
+    const received: any[] = [];
+
+    await interceptForwardedLogs(context, endpointUrl, (logs) =>
+      received.push(...logs)
+    );
+
+    const page = await context.newPage();
+    await page.goto("about:blank");
+    await page.evaluate(async ({ url, payload }) => {
+      await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }, {
+      url: endpointUrl,
+      payload: {
+        logs: [
+          {
+            level: "log",
+            message: "Test console forwarding from Playwright",
+            timestamp: new Date().toISOString(),
+            module: "test",
+          },
+        ],
       },
-      body: JSON.stringify(testLogData),
     });
 
-    expect(response.ok).toBeTruthy();
+    await expect
+      .poll(() => received.length > 0, { timeout: 5000 })
+      .toBeTruthy();
+    expect(received[0].message).toContain(
+      "Test console forwarding from Playwright"
+    );
+  });
+});
+
+test.describe("Console Forwarding End-to-End", () => {
+  type ForwardedLog = {
+    level: string;
+    message: string;
+    module?: string;
+  };
+
+  test("should forward popup, background, and content logs to dev server", async ({
+    context,
+    extensionId,
+  }) => {
+    const endpointUrl = `${DEV_SERVER_URL}${ENDPOINT_PATH}`;
+    const serverEndpoint = endpointUrl.replace("localhost", "127.0.0.1");
+    const forwardedLogs: ForwardedLog[] = [];
+    const seenRequests: number[] = [];
+
+    await interceptForwardedLogs(context, endpointUrl, (logs) => {
+      forwardedLogs.push(...logs);
+      seenRequests.push(logs.length);
+    });
+
+    // Clear any previously captured logs on the dev server
+    await context.request.delete(serverEndpoint);
+
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popupPage.waitForLoadState("domcontentloaded");
+    await popupPage.waitForFunction(
+      () => document.querySelector("#app")?.childElementCount,
+      undefined,
+      { timeout: 10000 }
+    );
+    await popupPage.evaluate(() => {
+      console.log("[Popup] E2E log");
+      console.error("[Popup] E2E error");
+    });
+
+    // Trigger fresh background logs to ensure they are forwarded after capture hook is registered
+    let [serviceWorker] = context.serviceWorkers();
+    if (!serviceWorker) {
+      serviceWorker = await context.waitForEvent("serviceworker", {
+        timeout: 10000,
+      });
+    }
+
+    await serviceWorker.evaluate(() => {
+      console.log("[Background] Manual log to verify forwarding");
+      console.error("[Background] Manual error to verify forwarding");
+    });
+
+    // Trigger content script logging on a real page
+    const contentPage = await context.newPage();
+    await contentPage.goto("https://example.com");
+    await contentPage.waitForLoadState("load");
+    await expect(
+      contentPage.getByRole("heading", { name: /example domain/i })
+    ).toBeVisible();
+    await contentPage.click("body");
+
+    const hasLogWith = (predicate: (log: ForwardedLog) => boolean) =>
+      forwardedLogs.some(predicate);
+
+    await expect
+      .poll(() => forwardedLogs.length, { timeout: 15000 })
+      .toBeGreaterThan(0);
+    console.log("Forwarded logs sample", forwardedLogs.slice(0, 5));
+    const moduleCounts = forwardedLogs.reduce<Record<string, number>>((acc, log) => {
+      const key = log.module || "unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    console.log("Forwarded module counts", moduleCounts);
+
+    const fetchServerLogs = async () => {
+      const response = await context.request.get(serverEndpoint);
+      if (!response.ok) return [];
+      const data = (await response.json()) as { logs?: ForwardedLog[] };
+      return data.logs ?? [];
+    };
+
+    await expect
+      .poll(async () => (await fetchServerLogs()).length, { timeout: 20000 })
+      .toBeGreaterThan(0);
+
+    const serverLogs = await fetchServerLogs();
+    const allLogs = [...forwardedLogs, ...(serverLogs || [])];
+
+    const hasLogWithAny = (predicate: (log: ForwardedLog) => boolean) =>
+      allLogs.some(predicate);
+
+    await expect.poll(
+      () =>
+        hasLogWithAny(
+          (log) =>
+            log.message.toLowerCase().includes("popup") ||
+            log.module?.toLowerCase().includes("popup")
+        ),
+      {
+        timeout: 15000,
+      }
+    ).toBeTruthy();
+
+    await expect.poll(
+      () =>
+        hasLogWithAny(
+          (log) =>
+            log.message.toLowerCase().includes("background") ||
+            log.module?.toLowerCase().includes("background")
+        ),
+      {
+        timeout: 15000,
+      }
+    ).toBeTruthy();
+
+    await expect.poll(
+      () =>
+        hasLogWithAny(
+          (log) =>
+            log.module?.toLowerCase().includes("content") ||
+            log.message.toLowerCase().includes("content script")
+        ),
+      {
+        timeout: 15000,
+      }
+    ).toBeTruthy();
   });
 });

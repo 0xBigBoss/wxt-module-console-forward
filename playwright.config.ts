@@ -15,11 +15,12 @@ export default defineConfig({
   // Extension tests use custom fixtures that handle browser launch
   // No projects needed - fixtures.ts handles chromium.launchPersistentContext
   webServer: {
-    command: "cd example-extension && bun run dev",
+    command:
+      "cd example-extension && bun x wxt clean && bun run dev -- --port 5175 --host 127.0.0.1",
     port: 5175,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     stdout: "pipe",
     stderr: "pipe",
-    timeout: 30000,
+    timeout: 60000,
   },
 });

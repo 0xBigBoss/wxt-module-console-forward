@@ -45,6 +45,7 @@
     "test": "playwright test"
   },
   "dependencies": {
+    "magic-string": "^0.30.21",
     "micromatch": "^4.0.8"
   },
   "devDependencies": {

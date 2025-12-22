@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2025-12-22
+
+### Fixed
+- **Vite dev server URL path handling**: Fixed UI page detection not working during `wxt dev` because Vite passes URL-style paths (`/entrypoints/popup/main.tsx`) instead of full file system paths. This was causing React duplicate instance errors in popup/options/devtools pages.
+
+## [1.3.2] - 2025-12-22
+
+### Fixed
+- **JS/TS entrypoint classification**: Single-file entrypoints like `popup.ts` are now correctly treated as unlisted-script (not skipped), while only directory-based UI entrypoints like `popup/main.tsx` are skipped
+- **Configurable entrypointsDir**: Now uses `wxt.config.entrypointsDir` instead of hardcoded `/entrypoints/` path
+- **Windows path support**: Normalize backslashes in path handling
+- **CSS extension handling**: Added support for `.sass`, `.styl`, `.stylus` extensions
+
+### Changed
+- Renamed Playwright tests to `.pw.ts` to avoid conflicts with Bun test runner
+
 ## [1.3.1] - 2025-12-22
 
 ### Fixed

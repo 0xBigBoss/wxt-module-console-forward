@@ -273,7 +273,8 @@ export const FORWARD_ERRORS = ${resolvedOptions.forwardErrors};
             return `
 import { DEV_SERVER_ENDPOINT, ENDPOINT_PATH, SILENT_ON_ERROR, LEVELS, FORWARD_ERRORS } from '${configModuleId}';
 
-// Singleton pattern to prevent duplicate initialization
+// Singleton pattern to prevent duplicate initialization within the same window context
+// Each iframe has its own window/console, so each patches independently for log forwarding
 const CONSOLE_FORWARD_INITIALIZED_KEY = '__wxt_console_forward_initialized__';
 let isInitialized = false;
 
@@ -284,7 +285,7 @@ export function setModuleContext(context) {
   currentModuleContext = context;
 }
 
-// Check if already initialized
+// Check if already initialized in this window context
 if (typeof window !== 'undefined') {
   isInitialized = window[CONSOLE_FORWARD_INITIALIZED_KEY] === true;
   if (!isInitialized) {
@@ -539,6 +540,24 @@ export default { flushLogs };
           if (
             entrypointName &&
             resolvedOptions.excludeEntrypoints.includes(entrypointName)
+          ) {
+            return;
+          }
+
+          // Skip UI entry point files in the entrypoints directory to avoid React module
+          // resolution issues. These files are direct entry points for HTML pages that load
+          // in iframes (devtools panels, popups, options, sidepanel). Prepending imports to
+          // these specific entry files can cause React to be resolved differently, leading
+          // to "Invalid hook call" errors.
+          // Only apply to files in entrypoints/ directory with exact basename matches.
+          const isInEntrypoints = id.includes("/entrypoints/");
+          const uiEntryBasenames = ["main", "index", "App"];
+          if (
+            isInEntrypoints &&
+            entrypointName &&
+            uiEntryBasenames.some(
+              (basename) => entrypointName.toLowerCase() === basename.toLowerCase()
+            )
           ) {
             return;
           }

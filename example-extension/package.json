@@ -16,11 +16,15 @@
   },
   "devDependencies": {
     "@types/debug": "^4.1.12",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "typescript": "^5.9.2",
     "wxt": "^0.20.6"
   },
   "dependencies": {
     "debug": "^4.4.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "wxt-module-console-forward": "file:.."
   }
 }

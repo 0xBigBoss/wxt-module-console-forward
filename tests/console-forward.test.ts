@@ -199,6 +199,62 @@ test.describe("Console Forwarding Integration", () => {
   });
 });
 
+test.describe("React Iframe Context (devtools panel)", () => {
+  test("should render React devtools panel without Invalid hook call errors", async ({
+    context,
+    extensionId,
+  }) => {
+    // This test verifies the fix for React "Invalid hook call" errors in iframe contexts
+    // The bug occurred when console-forward's transform hook prepended imports to entry files,
+    // which changed Vite's module resolution order and caused React to be bundled twice
+
+    const devtoolsPanelPage = await context.newPage();
+    const errors: string[] = [];
+
+    // Capture any console errors, especially React hook errors
+    devtoolsPanelPage.on("console", (msg) => {
+      if (msg.type() === "error") {
+        errors.push(msg.text());
+      }
+    });
+
+    // Capture page errors (uncaught exceptions)
+    devtoolsPanelPage.on("pageerror", (error) => {
+      errors.push(error.message);
+    });
+
+    // Navigate to the devtools panel which uses React with hooks
+    await devtoolsPanelPage.goto(
+      `chrome-extension://${extensionId}/devtools-panel.html`
+    );
+    await devtoolsPanelPage.waitForLoadState("domcontentloaded");
+
+    // Wait for React to render - the component sets "Mounted" status via useLayoutEffect
+    await expect(devtoolsPanelPage.getByText("Status: Mounted")).toBeVisible({
+      timeout: 10000,
+    });
+
+    // Verify the React component rendered correctly
+    await expect(
+      devtoolsPanelPage.getByRole("heading", { name: /DevTools Panel/i })
+    ).toBeVisible();
+    await expect(devtoolsPanelPage.getByText(/Count: \d+/)).toBeVisible();
+
+    // Test that React hooks still work - click the increment button
+    await devtoolsPanelPage.getByRole("button", { name: /Increment/i }).click();
+    await expect(devtoolsPanelPage.getByText("Count: 1")).toBeVisible();
+
+    // Verify no React hook errors occurred
+    const hookErrors = errors.filter(
+      (e) =>
+        e.includes("Invalid hook call") ||
+        e.includes("useLayoutEffect") ||
+        e.includes("Cannot read properties of null")
+    );
+    expect(hookErrors).toHaveLength(0);
+  });
+});
+
 test.describe("Console Forwarding End-to-End", () => {
   type ForwardedLog = {
     level: string;

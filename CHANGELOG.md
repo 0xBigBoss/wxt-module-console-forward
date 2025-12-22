@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2025-12-22
+
+### Fixed
+- **React iframe context compatibility**: Fixed "Invalid hook call" errors in browser extension iframe contexts (devtools panels, popups, options pages)
+  - Transform hook now skips injection for entry point files (`main`, `index`, `App`) in the `entrypoints/` directory to prevent React module resolution issues
+  - Uses exact basename matching instead of substring matching to avoid false positives (e.g., `domain.ts` containing "main")
+  - Each iframe window patches its own console independently, ensuring logs forward correctly from all contexts
+
+### Added
+- **React devtools panel example**: Added example devtools panel with React hooks to verify iframe compatibility
+- **Regression test**: Added Playwright test to catch React hook errors in iframe contexts
+
 ## [1.3.0] - 2025-12-21
 
 ### Added

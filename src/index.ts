@@ -840,13 +840,11 @@ export default { flushLogs };
             return;
           }
 
-          // Skip UI HTML page entry point files to avoid React module resolution issues.
-          // UI pages (popup, options, devtools, sidepanel, newtab, history, bookmarks,
-          // sandbox) load in browser extension iframes. Prepending imports can cause
-          // React to resolve differently, leading to "Invalid hook call" errors.
-          if (shouldSkipConsoleForward(id, wxt.config.entrypointsDir)) {
-            return;
-          }
+          // NOTE: We no longer skip UI pages (popup, options, devtools, etc.) because
+          // the entry-file-only injection should prevent React module resolution issues.
+          // The original React "Invalid hook call" errors were caused by injecting into
+          // shared modules, not by injecting into entry files themselves.
+          // Users can still exclude specific entrypoints via excludeEntrypoints config.
 
           // Extract entrypoint info for module context naming
           const wxtEntrypointInfo = getWxtEntrypointInfo(id, wxt.config.entrypointsDir);

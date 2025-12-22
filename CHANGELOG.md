@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2025-12-22
+
+### Fixed
+- **Restored popup/UI page log forwarding**: Popup, options, devtools, and other UI page logs are now correctly forwarded to the dev server. The v1.3.5 release incorrectly skipped UI pages which broke the core functionality of the module.
+
+### Changed
+- **Removed UI page skipping**: The `shouldSkipConsoleForward()` check was removed from the transform hook. The original React "Invalid hook call" errors were caused by missing `resolve.dedupe` configuration in Vite, not by the console-forward module. Users experiencing React duplicate instance errors should add the following to their `wxt.config.ts`:
+  ```ts
+  vite: () => ({
+    resolve: {
+      dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+    },
+  })
+  ```
+
 ## [1.3.5] - 2025-12-22
 
 ### Fixed

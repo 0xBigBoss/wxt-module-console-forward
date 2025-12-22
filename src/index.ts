@@ -3,6 +3,10 @@ import type { Plugin } from "vite";
 import MagicString from "magic-string";
 import "wxt";
 import { defineWxtModule } from "wxt/modules";
+import {
+  formatMessageWithANSI,
+  hasFormatSpecifiers,
+} from "./format-specifiers";
 
 interface LogEntry {
   level: string;
@@ -13,6 +17,8 @@ interface LogEntry {
   stacks?: string[];
   extra?: any;
   module?: string;
+  /** JSON-safe serialized args for format specifier processing (%c, %s) */
+  rawArgs?: string[];
 }
 
 interface ClientLogRequest {
@@ -167,9 +173,14 @@ export default defineWxtModule<ConsoleForwardOptions>({
                 logs.forEach((log) => {
                   lastForwardedLogs.push(log);
                   const location = log.url ? ` (${log.url})` : "";
-                  let message = `[${log.module || "unknown"}] [${log.level}] ${
-                    log.message
-                  }${location}`;
+
+                  // Format message with ANSI colors if rawArgs with format specifiers
+                  const displayMessage =
+                    log.rawArgs && hasFormatSpecifiers(log.rawArgs)
+                      ? formatMessageWithANSI(log.rawArgs)
+                      : log.message;
+
+                  let message = `[${log.module || "unknown"}] [${log.level}] ${displayMessage}${location}`;
 
                   // Add stack traces if available
                   if (log.stacks && log.stacks.length > 0) {
@@ -297,6 +308,22 @@ const MAX_BUFFER_SIZE = 50;
 function createLogEntry(level, args) {
   const stacks = [];
   const extra = [];
+  let extraIndex = 0;
+
+  // Serialize arg to JSON-safe string (for rawArgs)
+  function serializeArg(arg) {
+    if (arg === undefined) return "undefined";
+    if (arg === null) return "null";
+    if (typeof arg === "string") return arg;
+    if (arg instanceof Error || typeof arg.stack === "string") {
+      return arg.toString();
+    }
+    if (typeof arg === "object" && arg !== null) {
+      extraIndex++;
+      return "[extra#" + extraIndex + "]";
+    }
+    return String(arg);
+  }
 
   const message = args.map((arg) => {
     if (arg === undefined) return "undefined";
@@ -326,6 +353,12 @@ function createLogEntry(level, args) {
     return String(arg);
   }).join(" ");
 
+  // Capture rawArgs for format specifier processing (%c, %s)
+  const hasFormats =
+    typeof args[0] === "string" &&
+    (args[0].includes("%c") || args[0].includes("%s"));
+  const rawArgs = hasFormats ? args.map(serializeArg) : undefined;
+
   // Determine execution context
   let contextInfo = currentModuleContext;
   if (typeof self !== 'undefined' && typeof ServiceWorkerGlobalScope !== 'undefined' && self instanceof ServiceWorkerGlobalScope) {
@@ -351,6 +384,7 @@ function createLogEntry(level, args) {
     module: contextInfo,
     stacks,
     extra,
+    rawArgs,
   };
 }
 

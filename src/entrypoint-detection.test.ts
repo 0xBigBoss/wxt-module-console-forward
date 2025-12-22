@@ -3,6 +3,7 @@ import {
   getWxtEntrypointInfo,
   getWxtEntrypointName,
   isUiPageEntrypoint,
+  isWxtEntryFile,
   shouldSkipConsoleForward,
 } from "./index";
 
@@ -442,6 +443,88 @@ describe("getWxtEntrypointName (backward compat)", () => {
 
   test("returns null for non-entrypoint paths", () => {
     expect(getWxtEntrypointName("/project/src/utils.ts")).toBeNull();
+  });
+});
+
+describe("isWxtEntryFile", () => {
+  describe("returns true for actual entry files", () => {
+    test("single-file entrypoints", () => {
+      expect(isWxtEntryFile("/project/entrypoints/background.ts", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/project/entrypoints/popup.ts", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/project/entrypoints/overlay.content.ts", ENTRYPOINTS_DIR)).toBe(true);
+    });
+
+    test("directory index files", () => {
+      expect(isWxtEntryFile("/project/entrypoints/background/index.ts", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/project/entrypoints/content/index.ts", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/project/entrypoints/popup/index.tsx", ENTRYPOINTS_DIR)).toBe(true);
+    });
+
+    test("directory main files", () => {
+      expect(isWxtEntryFile("/project/entrypoints/popup/main.tsx", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/project/entrypoints/options/main.tsx", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/project/entrypoints/devtools/main.ts", ENTRYPOINTS_DIR)).toBe(true);
+    });
+
+    test("URL-style paths (Vite dev server)", () => {
+      expect(isWxtEntryFile("/entrypoints/background.ts", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/entrypoints/background/index.ts", ENTRYPOINTS_DIR)).toBe(true);
+      expect(isWxtEntryFile("/entrypoints/popup/main.tsx", ENTRYPOINTS_DIR)).toBe(true);
+    });
+  });
+
+  describe("returns false for shared modules and non-entry files", () => {
+    test("shared directory files", () => {
+      expect(isWxtEntryFile("/project/entrypoints/shared/utils.ts", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/project/entrypoints/shared/hooks.ts", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/project/entrypoints/shared/components/Button.tsx", ENTRYPOINTS_DIR)).toBe(false);
+    });
+
+    test("common shared code directories should NOT be treated as entry files", () => {
+      // These directory names are commonly used for shared code and should be excluded
+      // even if they have index.ts or main.ts files
+      const sharedDirNames = [
+        "shared", "common", "lib", "utils", "helpers", "hooks",
+        "components", "stores", "services", "api", "types", "constants"
+      ];
+
+      for (const dirName of sharedDirNames) {
+        expect(isWxtEntryFile(`/project/entrypoints/${dirName}/index.ts`, ENTRYPOINTS_DIR)).toBe(false);
+        expect(isWxtEntryFile(`/project/entrypoints/${dirName}/main.ts`, ENTRYPOINTS_DIR)).toBe(false);
+      }
+    });
+
+    test("nested component files in entrypoint directories", () => {
+      expect(isWxtEntryFile("/project/entrypoints/popup/App.tsx", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/project/entrypoints/popup/components/Header.tsx", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/project/entrypoints/options/pages/Settings.tsx", ENTRYPOINTS_DIR)).toBe(false);
+    });
+
+    test("utility files in entrypoint directories", () => {
+      expect(isWxtEntryFile("/project/entrypoints/background/utils.ts", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/project/entrypoints/content/helpers.ts", ENTRYPOINTS_DIR)).toBe(false);
+    });
+
+    test("URL-style shared module paths (Vite dev server)", () => {
+      expect(isWxtEntryFile("/entrypoints/shared/utils.ts", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/entrypoints/popup/App.tsx", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/entrypoints/popup/components/Header.tsx", ENTRYPOINTS_DIR)).toBe(false);
+    });
+  });
+
+  describe("returns false for non-entrypoint paths", () => {
+    test("src directory", () => {
+      expect(isWxtEntryFile("/project/src/utils.ts", ENTRYPOINTS_DIR)).toBe(false);
+      expect(isWxtEntryFile("/project/src/components/Button.tsx", ENTRYPOINTS_DIR)).toBe(false);
+    });
+
+    test("node_modules", () => {
+      expect(isWxtEntryFile("/project/node_modules/react/index.js", ENTRYPOINTS_DIR)).toBe(false);
+    });
+
+    test("root files", () => {
+      expect(isWxtEntryFile("/project/index.ts", ENTRYPOINTS_DIR)).toBe(false);
+    });
   });
 });
 

@@ -160,9 +160,97 @@ export function isUiPageEntrypoint(dirName: string): boolean {
 }
 
 /**
+ * Common directory names used for shared code that should NOT be treated as entrypoints.
+ * These are often mistakenly placed in entrypoints/ but are imported by multiple entrypoints,
+ * causing module resolution issues when we inject console forwarding.
+ */
+const SHARED_CODE_DIRECTORY_NAMES = new Set([
+  "shared",
+  "common",
+  "lib",
+  "utils",
+  "helpers",
+  "hooks",
+  "components",
+  "stores",
+  "services",
+  "api",
+  "types",
+  "constants",
+]);
+
+/**
+ * Determines if a file is an actual WXT entrypoint entry file.
+ *
+ * WXT entry files are:
+ * - Single-file entrypoints: `entrypoints/<name>.<ext>` (direct children)
+ * - Directory entry files: `entrypoints/<name>/index.<ext>` or `entrypoints/<name>/main.<ext>`
+ *   where the file is EXACTLY one level deep (entrypoint directory + file)
+ *
+ * NOT entry files (shared modules):
+ * - `entrypoints/shared/*` - directory name in SHARED_CODE_DIRECTORY_NAMES
+ * - `entrypoints/<name>/components/*` - more than one level deep
+ * - `entrypoints/<name>/App.tsx` - not named index/main
+ *
+ * @param filePath - The file path to check
+ * @param entrypointsDir - The entrypoints directory path
+ */
+export function isWxtEntryFile(
+  filePath: string,
+  entrypointsDir: string
+): boolean {
+  const info = getWxtEntrypointInfo(filePath, entrypointsDir);
+  if (!info) return false;
+
+  // Single-file entrypoints are always entry files
+  // e.g., entrypoints/background.ts, entrypoints/overlay.content.ts
+  if (!info.isInSubdirectory) {
+    return true;
+  }
+
+  // For directory-based entrypoints, must be exactly one level deep
+  // e.g., entrypoints/popup/main.tsx (2 segments: popup, main.tsx)
+  // NOT: entrypoints/popup/components/Header.tsx (3+ segments)
+  const normalizedPath = filePath.replace(/\\/g, "/");
+
+  // Extract relative path after entrypoints/
+  let relativePath: string;
+  const entrypointsIndex = normalizedPath.indexOf("/entrypoints/");
+  if (entrypointsIndex !== -1) {
+    relativePath = normalizedPath.slice(entrypointsIndex + "/entrypoints/".length);
+  } else {
+    // Shouldn't happen if info is not null, but handle gracefully
+    return false;
+  }
+
+  const segments = relativePath.split("/").filter(Boolean);
+
+  // Must have exactly 2 segments: directory + file
+  // e.g., ["popup", "main.tsx"] or ["background", "index.ts"]
+  if (segments.length !== 2) {
+    return false;
+  }
+
+  const directoryName = segments[0];
+  const filename = segments[1];
+
+  // Exclude common shared code directories
+  // These are often mistakenly placed in entrypoints/ but should be outside
+  if (SHARED_CODE_DIRECTORY_NAMES.has(directoryName)) {
+    return false;
+  }
+
+  // File must be named index or main
+  const basename = filename.replace(/\.[^.]+$/, "");
+
+  return basename === "index" || basename === "main";
+}
+
+/**
  * Determines if a file should skip console forwarding injection.
  *
  * Rules:
+ * - Non-entry files (shared modules, components): SKIP (not entry points)
  * - Single-file JS/TS entrypoints (e.g., popup.ts): NEVER skip (WXT treats as unlisted-script)
  * - Directory-based entrypoints with UI page names (e.g., popup/main.tsx): SKIP
  * - Non-UI entrypoints (e.g., background/index.ts, content/index.ts): NEVER skip
@@ -713,6 +801,33 @@ export default { flushLogs };
           // Skip node_modules
           if (id.includes("node_modules")) return;
 
+          // Only process JS/TS files
+          if (
+            !id.endsWith(".js") &&
+            !id.endsWith(".ts") &&
+            !id.endsWith(".tsx") &&
+            !id.endsWith(".jsx")
+          ) {
+            return;
+          }
+
+          // Skip files that already have the forward module imported
+          if (code.includes(forwardModuleId) || code.includes("setModuleContext")) {
+            return;
+          }
+
+          // CRITICAL: Only inject into actual WXT entry files, NOT shared modules.
+          // Injecting into shared modules (e.g., entrypoints/shared/utils.ts) changes
+          // Vite's module resolution and causes React to be bundled twice when the
+          // shared module is imported by both UI pages and non-UI entries.
+          //
+          // Entry files are:
+          // - Single-file entrypoints: entrypoints/<name>.<ext>
+          // - Directory entry files: entrypoints/<name>/index.<ext> or main.<ext>
+          if (!isWxtEntryFile(id, wxt.config.entrypointsDir)) {
+            return;
+          }
+
           // Check if this entrypoint should be excluded by user config
           const fileBasename = id
             .split("/")
@@ -725,45 +840,29 @@ export default { flushLogs };
             return;
           }
 
-          // Skip UI HTML page entry point files in the entrypoints directory to avoid
-          // React module resolution issues. UI pages (popup, options, devtools, sidepanel,
-          // newtab, history, bookmarks, sandbox) load in browser extension iframes.
-          // Prepending imports to these entry files can cause React to resolve differently,
-          // leading to "Invalid hook call" errors.
-          //
-          // Only skip directory-based UI entrypoints (e.g., popup/main.tsx).
-          // Single-file entrypoints (e.g., popup.ts) are unlisted-script in WXT, not UI pages.
-          // Non-UI entrypoints (background, content-script) should NOT be skipped.
+          // Skip UI HTML page entry point files to avoid React module resolution issues.
+          // UI pages (popup, options, devtools, sidepanel, newtab, history, bookmarks,
+          // sandbox) load in browser extension iframes. Prepending imports can cause
+          // React to resolve differently, leading to "Invalid hook call" errors.
           if (shouldSkipConsoleForward(id, wxt.config.entrypointsDir)) {
             return;
           }
 
           // Extract entrypoint info for module context naming
           const wxtEntrypointInfo = getWxtEntrypointInfo(id, wxt.config.entrypointsDir);
+          const moduleContext = wxtEntrypointInfo?.name || fileBasename || "unknown";
+          const prependCode =
+            `import { setModuleContext } from '${forwardModuleId}';\n` +
+            `setModuleContext('${moduleContext}');\n` +
+            `import '${forwardModuleId}';\n`;
 
-          // Inject into all JS/TS files that aren't already importing the forward module
-          if (
-            (id.endsWith(".js") ||
-              id.endsWith(".ts") ||
-              id.endsWith(".tsx") ||
-              id.endsWith(".jsx")) &&
-            !code.includes(forwardModuleId) &&
-            !code.includes("setModuleContext")
-          ) {
-            const moduleContext = wxtEntrypointInfo?.name || fileBasename || "unknown";
-            const prependCode =
-              `import { setModuleContext } from '${forwardModuleId}';\n` +
-              `setModuleContext('${moduleContext}');\n` +
-              `import '${forwardModuleId}';\n`;
+          const s = new MagicString(code);
+          s.prepend(prependCode);
 
-            const s = new MagicString(code);
-            s.prepend(prependCode);
-
-            return {
-              code: s.toString(),
-              map: s.generateMap({ hires: true, source: id }),
-            };
-          }
+          return {
+            code: s.toString(),
+            map: s.generateMap({ hires: true, source: id }),
+          };
         },
 
         // NOTE: HTML injection removed - the transform hook handles JS/TS entry files,

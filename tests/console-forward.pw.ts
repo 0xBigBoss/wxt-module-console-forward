@@ -262,7 +262,7 @@ test.describe("Console Forwarding End-to-End", () => {
     module?: string;
   };
 
-  test("should forward popup, background, and content logs to dev server", async ({
+  test("should forward background and content logs to dev server (UI pages skipped)", async ({
     context,
     extensionId,
   }) => {
@@ -278,19 +278,6 @@ test.describe("Console Forwarding End-to-End", () => {
 
     // Clear any previously captured logs on the dev server
     await context.request.delete(serverEndpoint);
-
-    const popupPage = await context.newPage();
-    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
-    await popupPage.waitForLoadState("domcontentloaded");
-    await popupPage.waitForFunction(
-      () => document.querySelector("#app")?.childElementCount,
-      undefined,
-      { timeout: 10000 }
-    );
-    await popupPage.evaluate(() => {
-      console.log("[Popup] E2E log");
-      console.error("[Popup] E2E error");
-    });
 
     // Trigger fresh background logs to ensure they are forwarded after capture hook is registered
     let [serviceWorker] = context.serviceWorkers();
@@ -345,18 +332,7 @@ test.describe("Console Forwarding End-to-End", () => {
     const hasLogWithAny = (predicate: (log: ForwardedLog) => boolean) =>
       allLogs.some(predicate);
 
-    await expect.poll(
-      () =>
-        hasLogWithAny(
-          (log) =>
-            log.message.toLowerCase().includes("popup") ||
-            log.module?.toLowerCase().includes("popup")
-        ),
-      {
-        timeout: 15000,
-      }
-    ).toBeTruthy();
-
+    // Background logs should be forwarded (single-file entrypoint)
     await expect.poll(
       () =>
         hasLogWithAny(
@@ -369,6 +345,7 @@ test.describe("Console Forwarding End-to-End", () => {
       }
     ).toBeTruthy();
 
+    // Content logs should be forwarded (single-file entrypoint)
     await expect.poll(
       () =>
         hasLogWithAny(
@@ -380,5 +357,60 @@ test.describe("Console Forwarding End-to-End", () => {
         timeout: 15000,
       }
     ).toBeTruthy();
+  });
+
+  test("should NOT forward popup logs (UI pages are skipped to prevent React issues)", async ({
+    context,
+    extensionId,
+  }) => {
+    const endpointUrl = `${DEV_SERVER_URL}${ENDPOINT_PATH}`;
+    const serverEndpoint = endpointUrl.replace("localhost", "127.0.0.1");
+    const forwardedLogs: ForwardedLog[] = [];
+
+    await interceptForwardedLogs(context, endpointUrl, (logs) => {
+      forwardedLogs.push(...logs);
+    });
+
+    // Clear any previously captured logs on the dev server
+    await context.request.delete(serverEndpoint);
+
+    // Open popup and generate logs
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    await popupPage.waitForLoadState("domcontentloaded");
+    await popupPage.waitForFunction(
+      () => document.querySelector("#app")?.childElementCount,
+      undefined,
+      { timeout: 10000 }
+    );
+
+    // Generate popup logs via evaluate (browser console)
+    await popupPage.evaluate(() => {
+      console.log("[Popup] E2E log that should NOT be forwarded");
+      console.error("[Popup] E2E error that should NOT be forwarded");
+    });
+
+    // Wait a bit to allow any potential forwarding
+    await popupPage.waitForTimeout(2000);
+
+    const fetchServerLogs = async () => {
+      const response = await context.request.get(serverEndpoint);
+      if (!response.ok) return [];
+      const data = (await response.json()) as { logs?: ForwardedLog[] };
+      return data.logs ?? [];
+    };
+
+    const serverLogs = await fetchServerLogs();
+    const allLogs = [...forwardedLogs, ...(serverLogs || [])];
+
+    // Popup logs should NOT be forwarded (UI pages are skipped)
+    const hasPopupLogs = allLogs.some(
+      (log) =>
+        (log.message.toLowerCase().includes("popup") &&
+          log.message.toLowerCase().includes("e2e")) ||
+        log.module?.toLowerCase().includes("popup")
+    );
+
+    expect(hasPopupLogs).toBe(false);
   });
 });

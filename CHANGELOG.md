@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-12-21
+
+### Added
+- **ANSI color conversion**: Browser console `%c` format specifiers with CSS colors are now converted to ANSI terminal colors
+- **Format specifier parsing**: Supports `%c` (CSS styles), `%s` (substitutions), and `%%` (literal percent)
+- **CSS color support**: Handles hex (`#RGB`, `#RRGGBB`), `rgb()`, named colors, and reset keywords (`inherit`, `initial`, `unset`, `revert`)
+- **Bun.color integration**: Uses `Bun.color()` for robust CSS-to-ANSI conversion with fallback for non-Bun environments
+- **Unit tests**: Comprehensive test suite for format specifier parsing and color conversion
+
+### Fixed
+- **Color leaking prevention**: Each `%c` resets to default if no usable color is provided, matching browser behavior
+- **TTY-independent output**: Uses `ansi-16m` format for consistent colored output regardless of terminal detection
+
 ## [1.2.0] - 2025-12-13
 
 ### Added

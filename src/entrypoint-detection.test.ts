@@ -360,6 +360,71 @@ describe("getWxtEntrypointInfo", () => {
       ).toBeNull();
     });
   });
+
+  describe("handles URL-style paths from Vite dev server", () => {
+    // During Vite dev server mode, transform() receives URL-style paths like
+    // /entrypoints/popup/main.tsx instead of /Users/.../entrypoints/popup/main.tsx
+
+    test("popup directory (URL-style)", () => {
+      expect(
+        getWxtEntrypointInfo("/entrypoints/popup/main.tsx", ENTRYPOINTS_DIR)
+      ).toEqual({
+        name: "popup",
+        dirName: "popup",
+        isInSubdirectory: true,
+      });
+    });
+
+    test("options directory (URL-style)", () => {
+      expect(
+        getWxtEntrypointInfo("/entrypoints/options/main.tsx", ENTRYPOINTS_DIR)
+      ).toEqual({
+        name: "options",
+        dirName: "options",
+        isInSubdirectory: true,
+      });
+    });
+
+    test("devtools directory (URL-style)", () => {
+      expect(
+        getWxtEntrypointInfo("/entrypoints/devtools/index.tsx", ENTRYPOINTS_DIR)
+      ).toEqual({
+        name: "devtools",
+        dirName: "devtools",
+        isInSubdirectory: true,
+      });
+    });
+
+    test("background directory (URL-style)", () => {
+      expect(
+        getWxtEntrypointInfo("/entrypoints/background/index.ts", ENTRYPOINTS_DIR)
+      ).toEqual({
+        name: "background",
+        dirName: "background",
+        isInSubdirectory: true,
+      });
+    });
+
+    test("single-file entrypoint (URL-style)", () => {
+      expect(
+        getWxtEntrypointInfo("/entrypoints/background.ts", ENTRYPOINTS_DIR)
+      ).toEqual({
+        name: "background",
+        dirName: "background",
+        isInSubdirectory: false,
+      });
+    });
+
+    test("named sidepanel (URL-style)", () => {
+      expect(
+        getWxtEntrypointInfo("/entrypoints/settings.sidepanel/index.tsx", ENTRYPOINTS_DIR)
+      ).toEqual({
+        name: "settings",
+        dirName: "settings.sidepanel",
+        isInSubdirectory: true,
+      });
+    });
+  });
 });
 
 describe("getWxtEntrypointName (backward compat)", () => {
@@ -637,6 +702,60 @@ describe("shouldSkipConsoleForward", () => {
           "/project/src/entrypoints/background/index.ts",
           "/project/src/entrypoints"
         )
+      ).toBe(false);
+    });
+  });
+
+  describe("handles URL-style paths from Vite dev server", () => {
+    // Critical regression test: Vite dev server passes URL-style paths
+    // like /entrypoints/popup/main.tsx instead of full file system paths.
+    // This was causing UI pages to NOT be skipped, leading to React errors.
+
+    test("skips popup directory (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/popup/main.tsx", ENTRYPOINTS_DIR)
+      ).toBe(true);
+    });
+
+    test("skips options directory (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/options/main.tsx", ENTRYPOINTS_DIR)
+      ).toBe(true);
+    });
+
+    test("skips devtools directory (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/devtools/index.tsx", ENTRYPOINTS_DIR)
+      ).toBe(true);
+    });
+
+    test("skips sidepanel directory (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/sidepanel/index.tsx", ENTRYPOINTS_DIR)
+      ).toBe(true);
+    });
+
+    test("skips named sidepanel (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/settings.sidepanel/index.tsx", ENTRYPOINTS_DIR)
+      ).toBe(true);
+    });
+
+    test("does NOT skip background directory (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/background/index.ts", ENTRYPOINTS_DIR)
+      ).toBe(false);
+    });
+
+    test("does NOT skip content script directory (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/content/index.ts", ENTRYPOINTS_DIR)
+      ).toBe(false);
+    });
+
+    test("does NOT skip single-file entrypoint (URL-style)", () => {
+      expect(
+        shouldSkipConsoleForward("/entrypoints/background.ts", ENTRYPOINTS_DIR)
       ).toBe(false);
     });
   });

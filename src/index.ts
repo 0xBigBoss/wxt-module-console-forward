@@ -40,42 +40,12 @@ const ENTRYPOINT_EXTENSIONS_PATTERN =
   /\.(ts|tsx|js|jsx|html|css|scss|less|sass|styl|stylus)$/;
 
 /**
- * Extracts WXT entrypoint info from a file path.
- * Returns the entrypoint name (for logging), directory name (for type detection),
- * and whether this is a directory-based entrypoint.
- *
- * @param filePath - The file path to analyze
- * @param entrypointsDir - The entrypoints directory path (from wxt.config.entrypointsDir)
- *
- * @example
- * getWxtEntrypointInfo("/project/entrypoints/popup/main.ts", "/project/entrypoints")
- * // → { name: "popup", dirName: "popup", isInSubdirectory: true }
- *
- * getWxtEntrypointInfo("/project/entrypoints/popup.ts", "/project/entrypoints")
- * // → { name: "popup", dirName: "popup", isInSubdirectory: false }
+ * Parses a relative path (after entrypoints/) into entrypoint info.
+ * Internal helper shared by getWxtEntrypointInfo for both full paths and URL-style paths.
  */
-export function getWxtEntrypointInfo(
-  filePath: string,
-  entrypointsDir: string
-): { name: string; dirName: string; isInSubdirectory: boolean } | null {
-  // Normalize paths for comparison (handle trailing slashes, windows separators, etc.)
-  const normalizedFilePath = filePath.replace(/\\/g, "/");
-  const normalizedEntrypointsDir = entrypointsDir
-    .replace(/\\/g, "/")
-    .replace(/\/$/, "");
-  const entrypointsPrefix = `${normalizedEntrypointsDir}/`;
-
-  // Check if file is under the entrypoints directory
-  const entrypointsIndex = normalizedFilePath.indexOf(entrypointsPrefix);
-  if (entrypointsIndex === -1) {
-    return null;
-  }
-
-  // Extract the relative path after entrypoints/
-  const relativePath = normalizedFilePath.slice(
-    entrypointsIndex + entrypointsPrefix.length
-  );
-
+function parseRelativePath(
+  relativePath: string
+): { name: string; dirName: string; isInSubdirectory: boolean } {
   // Split into path segments
   const segments = relativePath.split(/[/\\]/);
 
@@ -95,6 +65,61 @@ export function getWxtEntrypointInfo(
   const name = relativePath.split(/[./\\]/, 2)[0];
 
   return { name: name || dirName, dirName, isInSubdirectory };
+}
+
+/**
+ * Extracts WXT entrypoint info from a file path.
+ * Returns the entrypoint name (for logging), directory name (for type detection),
+ * and whether this is a directory-based entrypoint.
+ *
+ * Handles both:
+ * - Full file system paths (build mode): /project/entrypoints/popup/main.ts
+ * - URL-style paths (Vite dev server): /entrypoints/popup/main.tsx
+ *
+ * @param filePath - The file path to analyze
+ * @param entrypointsDir - The entrypoints directory path (from wxt.config.entrypointsDir)
+ *
+ * @example
+ * getWxtEntrypointInfo("/project/entrypoints/popup/main.ts", "/project/entrypoints")
+ * // → { name: "popup", dirName: "popup", isInSubdirectory: true }
+ *
+ * getWxtEntrypointInfo("/project/entrypoints/popup.ts", "/project/entrypoints")
+ * // → { name: "popup", dirName: "popup", isInSubdirectory: false }
+ *
+ * // URL-style path from Vite dev server
+ * getWxtEntrypointInfo("/entrypoints/popup/main.tsx", "/project/entrypoints")
+ * // → { name: "popup", dirName: "popup", isInSubdirectory: true }
+ */
+export function getWxtEntrypointInfo(
+  filePath: string,
+  entrypointsDir: string
+): { name: string; dirName: string; isInSubdirectory: boolean } | null {
+  // Normalize paths for comparison (handle trailing slashes, windows separators, etc.)
+  const normalizedFilePath = filePath.replace(/\\/g, "/");
+  const normalizedEntrypointsDir = entrypointsDir
+    .replace(/\\/g, "/")
+    .replace(/\/$/, "");
+  const entrypointsPrefix = `${normalizedEntrypointsDir}/`;
+
+  // Try full path match first (build mode)
+  const entrypointsIndex = normalizedFilePath.indexOf(entrypointsPrefix);
+  if (entrypointsIndex !== -1) {
+    const relativePath = normalizedFilePath.slice(
+      entrypointsIndex + entrypointsPrefix.length
+    );
+    return parseRelativePath(relativePath);
+  }
+
+  // Fallback: URL-style path match (Vite dev server mode)
+  // Vite dev server passes paths like: /entrypoints/popup/main.tsx
+  // instead of: /Users/.../entrypoints/popup/main.tsx
+  const urlStylePrefix = "/entrypoints/";
+  if (normalizedFilePath.startsWith(urlStylePrefix)) {
+    const relativePath = normalizedFilePath.slice(urlStylePrefix.length);
+    return parseRelativePath(relativePath);
+  }
+
+  return null;
 }
 
 /**

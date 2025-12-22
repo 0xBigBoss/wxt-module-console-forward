@@ -8,6 +8,162 @@ import {
   hasFormatSpecifiers,
 } from "./format-specifiers";
 
+/**
+ * UI HTML page entrypoint names that should be skipped for console forwarding.
+ * These render in browser extension iframes (popup, options, devtools panels, etc.)
+ * and prepending imports can cause React module resolution issues.
+ *
+ * Note: WXT only treats these as UI pages when they're HTML files or directories
+ * containing HTML. Single JS/TS files like `popup.ts` are unlisted-script type.
+ */
+const UI_PAGE_ENTRYPOINT_NAMES = new Set([
+  "popup",
+  "options",
+  "devtools",
+  "sidepanel",
+  "newtab",
+  "history",
+  "bookmarks",
+  "sandbox",
+]);
+
+/**
+ * Suffixes for named UI page entrypoints (e.g., "named.sidepanel", "settings.sandbox")
+ */
+const UI_PAGE_ENTRYPOINT_SUFFIXES = [".sidepanel", ".sandbox"];
+
+/**
+ * File extensions to strip when extracting entrypoint directory names.
+ * Includes all extensions WXT supports for entrypoints.
+ */
+const ENTRYPOINT_EXTENSIONS_PATTERN =
+  /\.(ts|tsx|js|jsx|html|css|scss|less|sass|styl|stylus)$/;
+
+/**
+ * Extracts WXT entrypoint info from a file path.
+ * Returns the entrypoint name (for logging), directory name (for type detection),
+ * and whether this is a directory-based entrypoint.
+ *
+ * @param filePath - The file path to analyze
+ * @param entrypointsDir - The entrypoints directory path (from wxt.config.entrypointsDir)
+ *
+ * @example
+ * getWxtEntrypointInfo("/project/entrypoints/popup/main.ts", "/project/entrypoints")
+ * // → { name: "popup", dirName: "popup", isInSubdirectory: true }
+ *
+ * getWxtEntrypointInfo("/project/entrypoints/popup.ts", "/project/entrypoints")
+ * // → { name: "popup", dirName: "popup", isInSubdirectory: false }
+ */
+export function getWxtEntrypointInfo(
+  filePath: string,
+  entrypointsDir: string
+): { name: string; dirName: string; isInSubdirectory: boolean } | null {
+  // Normalize paths for comparison (handle trailing slashes, windows separators, etc.)
+  const normalizedFilePath = filePath.replace(/\\/g, "/");
+  const normalizedEntrypointsDir = entrypointsDir
+    .replace(/\\/g, "/")
+    .replace(/\/$/, "");
+  const entrypointsPrefix = `${normalizedEntrypointsDir}/`;
+
+  // Check if file is under the entrypoints directory
+  const entrypointsIndex = normalizedFilePath.indexOf(entrypointsPrefix);
+  if (entrypointsIndex === -1) {
+    return null;
+  }
+
+  // Extract the relative path after entrypoints/
+  const relativePath = normalizedFilePath.slice(
+    entrypointsIndex + entrypointsPrefix.length
+  );
+
+  // Split into path segments
+  const segments = relativePath.split(/[/\\]/);
+
+  // Get the first segment (directory name or single filename)
+  const firstSegment = segments[0];
+
+  // Determine if this is a directory-based entrypoint (has subdirectory)
+  // e.g., "popup/main.tsx" vs "popup.ts"
+  const isInSubdirectory = segments.length > 1;
+
+  // For single-file entrypoints, remove the file extension but keep type suffixes
+  // e.g., "overlay.content.ts" → "overlay.content", "popup.html" → "popup"
+  const dirName = firstSegment.replace(ENTRYPOINT_EXTENSIONS_PATTERN, "");
+
+  // WXT entrypoint name: first segment before any . or / or \
+  // This mirrors WXT's getEntrypointName logic
+  const name = relativePath.split(/[./\\]/, 2)[0];
+
+  return { name: name || dirName, dirName, isInSubdirectory };
+}
+
+/**
+ * Extracts the WXT entrypoint name from a file path.
+ * Uses default "/entrypoints/" pattern for backward compatibility.
+ *
+ * @deprecated Use getWxtEntrypointInfo with explicit entrypointsDir instead
+ */
+export function getWxtEntrypointName(filePath: string): string | null {
+  // Fallback to pattern matching for backward compatibility
+  const entrypointsMatch = filePath.match(/\/entrypoints\/(.+)/);
+  if (!entrypointsMatch) return null;
+
+  const relativePath = entrypointsMatch[1];
+  const name = relativePath.split(/[./\\]/, 2)[0];
+  return name || null;
+}
+
+/**
+ * Determines if an entrypoint directory name matches a UI HTML page type.
+ *
+ * @param dirName - The directory or file name (with type suffix, e.g., "settings.sidepanel")
+ */
+export function isUiPageEntrypoint(dirName: string): boolean {
+  // Check exact matches for standard UI page entrypoints
+  if (UI_PAGE_ENTRYPOINT_NAMES.has(dirName)) {
+    return true;
+  }
+
+  // Check for named variants (e.g., "settings.sidepanel", "test.sandbox")
+  for (const suffix of UI_PAGE_ENTRYPOINT_SUFFIXES) {
+    if (dirName.endsWith(suffix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Determines if a file should skip console forwarding injection.
+ *
+ * Rules:
+ * - Single-file JS/TS entrypoints (e.g., popup.ts): NEVER skip (WXT treats as unlisted-script)
+ * - Directory-based entrypoints with UI page names (e.g., popup/main.tsx): SKIP
+ * - Non-UI entrypoints (e.g., background/index.ts, content/index.ts): NEVER skip
+ *
+ * @param filePath - The file path to check
+ * @param entrypointsDir - The entrypoints directory path
+ */
+export function shouldSkipConsoleForward(
+  filePath: string,
+  entrypointsDir: string
+): boolean {
+  const info = getWxtEntrypointInfo(filePath, entrypointsDir);
+  if (!info) return false;
+
+  // Single-file entrypoints: WXT only treats HTML files as UI pages.
+  // JS/TS files like "popup.ts" are unlisted-script, not popup type.
+  // Since we only transform JS/TS files, never skip single-file entrypoints.
+  if (!info.isInSubdirectory) {
+    return false;
+  }
+
+  // Directory-based entrypoints: Skip if the directory matches a UI page pattern.
+  // e.g., popup/main.tsx should be skipped, background/index.ts should not.
+  return isUiPageEntrypoint(info.dirName);
+}
+
 interface LogEntry {
   level: string;
   message: string;
@@ -532,35 +688,33 @@ export default { flushLogs };
           // Skip node_modules
           if (id.includes("node_modules")) return;
 
-          // Check if this entrypoint should be excluded
-          const entrypointName = id
+          // Check if this entrypoint should be excluded by user config
+          const fileBasename = id
             .split("/")
             .pop()
             ?.replace(/\.[^.]+$/, "");
           if (
-            entrypointName &&
-            resolvedOptions.excludeEntrypoints.includes(entrypointName)
+            fileBasename &&
+            resolvedOptions.excludeEntrypoints.includes(fileBasename)
           ) {
             return;
           }
 
-          // Skip UI entry point files in the entrypoints directory to avoid React module
-          // resolution issues. These files are direct entry points for HTML pages that load
-          // in iframes (devtools panels, popups, options, sidepanel). Prepending imports to
-          // these specific entry files can cause React to be resolved differently, leading
-          // to "Invalid hook call" errors.
-          // Only apply to files in entrypoints/ directory with exact basename matches.
-          const isInEntrypoints = id.includes("/entrypoints/");
-          const uiEntryBasenames = ["main", "index", "App"];
-          if (
-            isInEntrypoints &&
-            entrypointName &&
-            uiEntryBasenames.some(
-              (basename) => entrypointName.toLowerCase() === basename.toLowerCase()
-            )
-          ) {
+          // Skip UI HTML page entry point files in the entrypoints directory to avoid
+          // React module resolution issues. UI pages (popup, options, devtools, sidepanel,
+          // newtab, history, bookmarks, sandbox) load in browser extension iframes.
+          // Prepending imports to these entry files can cause React to resolve differently,
+          // leading to "Invalid hook call" errors.
+          //
+          // Only skip directory-based UI entrypoints (e.g., popup/main.tsx).
+          // Single-file entrypoints (e.g., popup.ts) are unlisted-script in WXT, not UI pages.
+          // Non-UI entrypoints (background, content-script) should NOT be skipped.
+          if (shouldSkipConsoleForward(id, wxt.config.entrypointsDir)) {
             return;
           }
+
+          // Extract entrypoint info for module context naming
+          const wxtEntrypointInfo = getWxtEntrypointInfo(id, wxt.config.entrypointsDir);
 
           // Inject into all JS/TS files that aren't already importing the forward module
           if (
@@ -571,7 +725,7 @@ export default { flushLogs };
             !code.includes(forwardModuleId) &&
             !code.includes("setModuleContext")
           ) {
-            const moduleContext = entrypointName || "unknown";
+            const moduleContext = wxtEntrypointInfo?.name || fileBasename || "unknown";
             const prependCode =
               `import { setModuleContext } from '${forwardModuleId}';\n` +
               `setModuleContext('${moduleContext}');\n` +

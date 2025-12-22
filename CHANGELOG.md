@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.4] - 2025-12-22
+## [1.3.5] - 2025-12-22
 
 ### Fixed
 - **Only inject into actual WXT entry files**: Console forwarding now only injects into actual entry files (`background.ts`, `popup/main.tsx`, `content/index.ts`), not shared modules (`shared/utils.ts`, `popup/App.tsx`). This fixes React duplicate instance errors caused by injecting into shared code imported by both UI pages and non-UI entries.
@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **`isWxtEntryFile()` function**: New exported function to detect actual WXT entry files
 - **Shared code directory exclusion**: Directories named `shared`, `common`, `lib`, `utils`, `helpers`, `hooks`, `components`, `stores`, `services`, `api`, `types`, `constants` are excluded from injection even if they contain `index.ts` or `main.ts`
+
+## [1.3.4] - 2025-12-22
+
+### Fixed
+- **Incomplete release**: This version was published without all fixes. Use 1.3.5 instead.
 
 ## [1.3.3] - 2025-12-22
 

@@ -1,6 +1,6 @@
 {
   "name": "wxt-module-console-forward",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "WXT module for forwarding console logs from web extension scripts to dev server",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
